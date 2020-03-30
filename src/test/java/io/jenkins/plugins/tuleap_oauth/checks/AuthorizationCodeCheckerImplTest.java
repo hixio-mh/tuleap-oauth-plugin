@@ -46,7 +46,7 @@ public class AuthorizationCodeCheckerImplTest {
     }
 
     @Test
-    public void testItReturnFalseWhenTheStoredSessionStateAndTheReturnedStateAreDifferent(){
+    public void testItReturnFalseWhenTheStoredSessionStateAndTheReturnedStateAreDifferent() {
         StaplerRequest request = mock(StaplerRequest.class);
         when(request.getParameter("code")).thenReturn("1234");
         when(request.getParameter("state")).thenReturn("issou");
@@ -59,13 +59,28 @@ public class AuthorizationCodeCheckerImplTest {
     }
 
     @Test
-    public void testItReturnTrueAuthorizationChecksAreOk(){
+    public void testItReturnFalseWhenThereIsNoCodeVerifierStoredInSession() {
         StaplerRequest request = mock(StaplerRequest.class);
         when(request.getParameter("code")).thenReturn("1234");
         when(request.getParameter("state")).thenReturn("issou");
         HttpSession session = mock(HttpSession.class);
         when(request.getSession()).thenReturn(session);
         when(session.getAttribute("state")).thenReturn("issou");
+        when(session.getAttribute("code_verifier")).thenReturn(null);
+
+        AuthorizationCodeCheckerImpl authorizationCodeChecker = new AuthorizationCodeCheckerImpl();
+        assertFalse(authorizationCodeChecker.checkAuthorizationCode(request));
+    }
+
+    @Test
+    public void testItReturnTrueAuthorizationChecksAreOk() {
+        StaplerRequest request = mock(StaplerRequest.class);
+        when(request.getParameter("code")).thenReturn("1234");
+        when(request.getParameter("state")).thenReturn("issou");
+        HttpSession session = mock(HttpSession.class);
+        when(request.getSession()).thenReturn(session);
+        when(session.getAttribute("state")).thenReturn("issou");
+        when(session.getAttribute("code_verifier")).thenReturn("tchiki tchiki");
 
         AuthorizationCodeCheckerImpl authorizationCodeChecker = new AuthorizationCodeCheckerImpl();
         assertTrue(authorizationCodeChecker.checkAuthorizationCode(request));

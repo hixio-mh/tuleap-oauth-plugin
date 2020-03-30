@@ -12,6 +12,7 @@ import io.jenkins.plugins.tuleap_oauth.checks.AccessTokenChecker;
 import io.jenkins.plugins.tuleap_oauth.checks.AuthorizationCodeChecker;
 import io.jenkins.plugins.tuleap_oauth.guice.TuleapOAuth2GuiceModule;
 import io.jenkins.plugins.tuleap_oauth.helper.PluginHelper;
+import io.jenkins.plugins.tuleap_oauth.pkce.PKCECodeBuilder;
 import jenkins.model.Jenkins;
 import jenkins.security.SecurityListener;
 import okhttp3.*;
@@ -28,6 +29,7 @@ import javax.servlet.http.HttpSession;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
+import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -45,12 +47,14 @@ public class TuleapSecurityRealm extends SecurityRealm {
     private static final String LOGIN_URL = "securityRealm/commenceLogin";
     private static final String AUTHORIZATION_ENDPOINT = "oauth2/authorize?";
 
+    public static final String CODE_VERIFIER_SESSION_ATTRIBUTE = "code_verifier";
     public static final String STATE_SESSION_ATTRIBUTE = "state";
     private static final String REDIRECT_URI = "securityRealm/finishLogin";
 
     private static final String ACCESS_TOKEN_ENDPOINT = "oauth2/token";
 
     public static final String SCOPE = "read:project";
+    public static final String CODE_CHALLENGE_METHOD = "S256";
 
     private static final String URL_CHARACTERS_ALLOWED =  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~";
 
@@ -58,6 +62,7 @@ public class TuleapSecurityRealm extends SecurityRealm {
     private PluginHelper pluginHelper;
     private AccessTokenChecker accessTokenChecker;
     private OkHttpClient httpClient;
+    private PKCECodeBuilder codeBuilder;
 
     @DataBoundConstructor
     public TuleapSecurityRealm(String tuleapUri, String clientId, String clientSecret) {
@@ -84,6 +89,11 @@ public class TuleapSecurityRealm extends SecurityRealm {
     @Inject
     public void setHttpClient(OkHttpClient httpClient) {
         this.httpClient = httpClient;
+    }
+
+    @Inject
+    public void setCodeBuilder(PKCECodeBuilder codeBuilder) {
+        this.codeBuilder = codeBuilder;
     }
 
     public String getTuleapUri() {
@@ -138,10 +148,10 @@ public class TuleapSecurityRealm extends SecurityRealm {
         if (jenkins.hasPermission(Jenkins.READ)) {
             return super.getPostLogOutUrl(req, auth);
         }
-        return req.getContextPath() + "/" + TuleapLogoutAction.REDIRECT_ON_LOGOUT + "/";
+        return req.getContextPath() + "/" + TuleapLogoutAction.REDIRECT_ON_LOGOUT;
     }
 
-    public HttpResponse doCommenceLogin(StaplerRequest request) throws UnsupportedEncodingException {
+    public HttpResponse doCommenceLogin(StaplerRequest request) throws UnsupportedEncodingException, NoSuchAlgorithmException {
         this.injectInstances();
 
         final String state = this.buildStateRandomString();
@@ -151,12 +161,18 @@ public class TuleapSecurityRealm extends SecurityRealm {
 
         final String redirectUri = URLEncoder.encode(rootUrl + REDIRECT_URI, UTF_8.name());
 
+        final String codeVerifier = this.codeBuilder.buildCodeVerifier();
+        final String codeChallenge = this.codeBuilder.buildCodeChallenge(codeVerifier);
+        request.getSession().setAttribute(CODE_VERIFIER_SESSION_ATTRIBUTE, codeVerifier);
+
         return new HttpRedirect(this.tuleapUri + AUTHORIZATION_ENDPOINT +
             "response_type=code" +
             "&client_id=" + this.clientId +
             "&redirect_uri=" + redirectUri +
             "&scope=" + SCOPE +
-            "&state=" + state
+            "&state=" + state +
+            "&code_challenge=" + codeChallenge +
+            "&code_challenge_method="+ CODE_CHALLENGE_METHOD
         );
     }
 
@@ -213,10 +229,11 @@ public class TuleapSecurityRealm extends SecurityRealm {
     private Request getAccessTokenRequest(StaplerRequest request) {
 
         final String code = request.getParameter("code");
-
+        final String codeVerifier = (String) request.getSession().getAttribute(CODE_VERIFIER_SESSION_ATTRIBUTE);
         RequestBody requestBody = new FormBody.Builder()
             .add("grant_type", "authorization_code")
             .add("code", code)
+            .add("code_verifier", codeVerifier)
             .addEncoded("redirect_uri", this.pluginHelper.getJenkinsInstance().getRootUrl() + REDIRECT_URI)
             .build();
 

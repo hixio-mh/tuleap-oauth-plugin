@@ -12,9 +12,6 @@ public class AccessTokenRepresentation {
     @SerializedName("expires_in")
     private String expiresIn;
 
-    @SerializedName("refresh_token")
-    private String refreshToken;
-
     public String getAccessToken() {
         return accessToken;
     }
@@ -25,9 +22,5 @@ public class AccessTokenRepresentation {
 
     public String getExpiresIn() {
         return expiresIn;
-    }
-
-    public String getRefreshToken() {
-        return refreshToken;
     }
 }

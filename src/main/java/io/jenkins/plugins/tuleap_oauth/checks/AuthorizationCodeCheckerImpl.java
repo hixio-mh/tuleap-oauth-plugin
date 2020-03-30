@@ -35,6 +35,13 @@ public class AuthorizationCodeCheckerImpl implements AuthorizationCodeChecker {
             LOGGER.log(Level.WARNING, "expected state and provided state does not match");
             return false;
         }
+
+        final String codeVerifier = (String) request.getSession().getAttribute(TuleapSecurityRealm.CODE_VERIFIER_SESSION_ATTRIBUTE);
+        if (StringUtils.isBlank(codeVerifier)) {
+            LOGGER.log(Level.WARNING, "no code verifier saved from user's session");
+            return false;
+        }
+
         return true;
     }
 }
