@@ -2,7 +2,7 @@ package io.jenkins.plugins.tuleap_oauth.pkce;
 
 import com.google.inject.Inject;
 import io.jenkins.plugins.tuleap_oauth.helper.PluginHelper;
-import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.net.util.Base64;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;

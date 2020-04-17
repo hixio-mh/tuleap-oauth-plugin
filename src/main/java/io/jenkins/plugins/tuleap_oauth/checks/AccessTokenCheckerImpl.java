@@ -57,13 +57,12 @@ public class AccessTokenCheckerImpl implements AccessTokenChecker {
         return true;
     }
 
-    public boolean checkResponseBody(ResponseBody body) throws IOException {
-        if (body == null) {
+    public boolean checkResponseBody(AccessTokenRepresentation accessTokenRepresentation) throws IOException {
+        if (accessTokenRepresentation == null) {
             LOGGER.log(Level.WARNING, "There is no body");
             return false;
         }
 
-        AccessTokenRepresentation accessTokenRepresentation = this.gson.fromJson(body.string(), AccessTokenRepresentation.class);
 
         if (StringUtils.isBlank(accessTokenRepresentation.getAccessToken())) {
             LOGGER.log(Level.WARNING, "Access token missing");
@@ -84,6 +83,12 @@ public class AccessTokenCheckerImpl implements AccessTokenChecker {
             LOGGER.log(Level.WARNING, "No expiration date returned");
             return false;
         }
+
+        if (StringUtils.isBlank(accessTokenRepresentation.getIdToken())) {
+            LOGGER.log(Level.WARNING, "id token parameter is missing");
+            return false;
+        }
+
         return true;
     }
 }

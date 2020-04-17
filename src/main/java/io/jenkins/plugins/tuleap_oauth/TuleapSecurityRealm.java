@@ -1,5 +1,10 @@
 package io.jenkins.plugins.tuleap_oauth;
 
+import com.auth0.jwk.*;
+import com.auth0.jwt.JWT;
+import com.auth0.jwt.algorithms.Algorithm;
+import com.auth0.jwt.interfaces.DecodedJWT;
+import com.google.gson.Gson;
 import com.google.inject.Guice;
 import com.google.inject.Inject;
 import hudson.Extension;
@@ -12,6 +17,7 @@ import io.jenkins.plugins.tuleap_oauth.checks.AccessTokenChecker;
 import io.jenkins.plugins.tuleap_oauth.checks.AuthorizationCodeChecker;
 import io.jenkins.plugins.tuleap_oauth.guice.TuleapOAuth2GuiceModule;
 import io.jenkins.plugins.tuleap_oauth.helper.PluginHelper;
+import io.jenkins.plugins.tuleap_oauth.model.AccessTokenRepresentation;
 import io.jenkins.plugins.tuleap_oauth.pkce.PKCECodeBuilder;
 import jenkins.model.Jenkins;
 import jenkins.security.SecurityListener;
@@ -28,12 +34,16 @@ import org.kohsuke.stapler.*;
 import javax.servlet.http.HttpSession;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.net.URL;
 import java.net.URLEncoder;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.security.NoSuchAlgorithmException;
+import java.security.Provider;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import static com.google.common.base.Charsets.UTF_8;
 
 public class TuleapSecurityRealm extends SecurityRealm {
 
@@ -54,7 +64,7 @@ public class TuleapSecurityRealm extends SecurityRealm {
     private static final String AUTHORIZATION_ENDPOINT = "oauth2/authorize?";
     private static final String ACCESS_TOKEN_ENDPOINT = "oauth2/token";
 
-    public static final String SCOPE = "read:project";
+    public static final String SCOPE = "openid";
     public static final String CODE_CHALLENGE_METHOD = "S256";
 
     private AuthorizationCodeChecker authorizationCodeChecker;
@@ -62,12 +72,18 @@ public class TuleapSecurityRealm extends SecurityRealm {
     private AccessTokenChecker accessTokenChecker;
     private OkHttpClient httpClient;
     private PKCECodeBuilder codeBuilder;
+    private Gson gson;
 
     @DataBoundConstructor
     public TuleapSecurityRealm(String tuleapUri, String clientId, String clientSecret) {
         this.setTuleapUri(Util.fixEmptyAndTrim(tuleapUri));
         this.clientId = Util.fixEmptyAndTrim(clientId);
         this.setClientSecret(Util.fixEmptyAndTrim(clientSecret));
+    }
+
+    @Inject
+    public void setGson(Gson gson) {
+        this.gson = gson;
     }
 
     @Inject
@@ -158,12 +174,14 @@ public class TuleapSecurityRealm extends SecurityRealm {
 
         final String rootUrl = this.getJenkinsInstance().getRootUrl();
 
-        final String redirectUri = URLEncoder.encode(rootUrl + REDIRECT_URI, UTF_8.name());
+        final String redirectUri = URLEncoder.encode(rootUrl + REDIRECT_URI, StandardCharsets.UTF_8.displayName());
         final String codeVerifier = this.codeBuilder.buildCodeVerifier();
         final String codeChallenge = this.codeBuilder.buildCodeChallenge(codeVerifier);
         request.getSession().setAttribute(CODE_VERIFIER_SESSION_ATTRIBUTE, codeVerifier);
 
         request.getSession().setAttribute(JENKINS_REDIRECT_URI_ATTRIBUTE, this.pluginHelper.getJenkinsInstance().getRootUrl() + REDIRECT_URI);
+
+        final String nonce = this.pluginHelper.buildRandomBase64EncodedURLSafeString();
 
         return new HttpRedirect(this.tuleapUri + AUTHORIZATION_ENDPOINT +
             "response_type=code" +
@@ -172,20 +190,22 @@ public class TuleapSecurityRealm extends SecurityRealm {
             "&scope=" + SCOPE +
             "&state=" + state +
             "&code_challenge=" + codeChallenge +
-            "&code_challenge_method="+ CODE_CHALLENGE_METHOD
+            "&code_challenge_method=" + CODE_CHALLENGE_METHOD +
+            "&nonce=" + nonce
         );
     }
 
     private void injectInstances() {
         if (this.pluginHelper == null ||
             this.authorizationCodeChecker == null ||
-            this.accessTokenChecker == null
+            this.accessTokenChecker == null ||
+            this.gson == null
         ) {
             Guice.createInjector(new TuleapOAuth2GuiceModule()).injectMembers(this);
         }
     }
 
-    public HttpResponse doFinishLogin(StaplerRequest request, StaplerResponse response) throws IOException {
+    public HttpResponse doFinishLogin(StaplerRequest request, StaplerResponse response) throws IOException, JwkException {
         if (!this.authorizationCodeChecker.checkAuthorizationCode(request)) {
             return HttpResponses.redirectTo(this.getJenkinsInstance().getRootUrl() + TuleapAuthenticationErrorAction.REDIRECT_ON_AUTHENTICATION_ERROR);
         }
@@ -195,24 +215,52 @@ public class TuleapSecurityRealm extends SecurityRealm {
 
         try (Response accessTokenResponse = okHttpClient.newCall(accessTokenRequest).execute()) {
             ResponseBody body = accessTokenResponse.body();
-            if (!accessTokenResponse.isSuccessful()) {
-                if (body == null) {
-                    LOGGER.log(Level.WARNING, "An error occurred");
-                } else {
-                    LOGGER.log(Level.WARNING, body.string());
-                }
+
+            if (body == null) {
+                LOGGER.log(Level.WARNING, "An error occurred");
                 return HttpResponses.redirectTo(this.getJenkinsInstance().getRootUrl() + TuleapAuthenticationErrorAction.REDIRECT_ON_AUTHENTICATION_ERROR);
             }
+
+            if (!accessTokenResponse.isSuccessful()) {
+                LOGGER.log(Level.WARNING, body.string());
+                return HttpResponses.redirectTo(this.getJenkinsInstance().getRootUrl() + TuleapAuthenticationErrorAction.REDIRECT_ON_AUTHENTICATION_ERROR);
+            }
+            String string = body.string();
+            LOGGER.warning(string);
+            AccessTokenRepresentation accessTokenRepresentation = this.gson.fromJson(string, AccessTokenRepresentation.class);
 
             if (!this.accessTokenChecker.checkResponseHeader(accessTokenResponse)) {
                 return HttpResponses.redirectTo(this.getJenkinsInstance().getRootUrl() + TuleapAuthenticationErrorAction.REDIRECT_ON_AUTHENTICATION_ERROR);
             }
 
-            if (!this.accessTokenChecker.checkResponseBody(body)) {
+            if (!this.accessTokenChecker.checkResponseBody(accessTokenRepresentation)) {
                 return HttpResponses.redirectTo(this.getJenkinsInstance().getRootUrl() + TuleapAuthenticationErrorAction.REDIRECT_ON_AUTHENTICATION_ERROR);
             }
+            DecodedJWT jwt = JWT.decode(accessTokenRepresentation.getIdToken());
+
+            LOGGER.warning(jwt.getHeader());
+            LOGGER.warning(jwt.getPayload());
+            LOGGER.warning(jwt.getSignature());
+            LOGGER.warning(jwt.getAlgorithm());
+            LOGGER.warning(jwt.getType());
+            LOGGER.warning(jwt.getIssuer());
+
+
+        }
+        Request req = new Request.Builder()
+            .url(this.tuleapUri + "oauth2/jwks")
+            .addHeader("Accept", "application/json")
+            .get()
+            .build();
+
+        try (Response jwksResponse = okHttpClient.newCall(req).execute()) {
+            LOGGER.warning("result :" + jwksResponse.body().string());
         }
 
+        JwkProvider provider = new UrlJwkProvider(new URL(this.tuleapUri+"oauth2/jwks"));
+        Jwk jwk = provider.get(null);
+
+//        LOGGER.warning(jwks.get(0).toString());
         this.authenticateAsAdmin(request);
 
         return HttpResponses.redirectToContextRoot();

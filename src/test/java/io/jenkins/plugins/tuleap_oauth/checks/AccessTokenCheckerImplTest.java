@@ -117,7 +117,7 @@ public class AccessTokenCheckerImplTest {
         when(this.gson.fromJson(body.string(), AccessTokenRepresentation.class)).thenReturn(representation);
 
         AccessTokenCheckerImpl accessTokenChecker = new AccessTokenCheckerImpl(this.gson);
-        assertFalse(accessTokenChecker.checkResponseBody(body));
+        assertFalse(accessTokenChecker.checkResponseBody(representation));
     }
 
     @Test
@@ -130,7 +130,7 @@ public class AccessTokenCheckerImplTest {
         when(this.gson.fromJson(body.string(), AccessTokenRepresentation.class)).thenReturn(representation);
 
         AccessTokenCheckerImpl accessTokenChecker = new AccessTokenCheckerImpl(this.gson);
-        assertFalse(accessTokenChecker.checkResponseBody(body));
+        assertFalse(accessTokenChecker.checkResponseBody(representation));
     }
 
     @Test
@@ -143,7 +143,7 @@ public class AccessTokenCheckerImplTest {
         when(this.gson.fromJson(body.string(), AccessTokenRepresentation.class)).thenReturn(representation);
 
         AccessTokenCheckerImpl accessTokenChecker = new AccessTokenCheckerImpl(this.gson);
-        assertFalse(accessTokenChecker.checkResponseBody(body));
+        assertFalse(accessTokenChecker.checkResponseBody(representation));
     }
 
     @Test
@@ -157,7 +157,7 @@ public class AccessTokenCheckerImplTest {
         when(this.gson.fromJson(body.string(), AccessTokenRepresentation.class)).thenReturn(representation);
 
         AccessTokenCheckerImpl accessTokenChecker = new AccessTokenCheckerImpl(this.gson);
-        assertFalse(accessTokenChecker.checkResponseBody(body));
+        assertFalse(accessTokenChecker.checkResponseBody(representation));
     }
 
     @Test
@@ -171,6 +171,6 @@ public class AccessTokenCheckerImplTest {
         when(this.gson.fromJson(body.string(), AccessTokenRepresentation.class)).thenReturn(representation);
 
         AccessTokenCheckerImpl accessTokenChecker = new AccessTokenCheckerImpl(this.gson);
-        assertTrue(accessTokenChecker.checkResponseBody(body));
+        assertTrue(accessTokenChecker.checkResponseBody(representation));
     }
 }

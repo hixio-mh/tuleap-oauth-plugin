@@ -1,7 +1,7 @@
 package io.jenkins.plugins.tuleap_oauth.helper;
 
 import jenkins.model.Jenkins;
-import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.net.util.Base64;
 
 import java.security.SecureRandom;
 
