@@ -16,17 +16,17 @@ import hudson.util.Secret;
 import io.jenkins.plugins.tuleap_oauth.checks.AccessTokenChecker;
 import io.jenkins.plugins.tuleap_oauth.checks.AuthorizationCodeChecker;
 import io.jenkins.plugins.tuleap_oauth.checks.JWTChecker;
+import io.jenkins.plugins.tuleap_oauth.checks.UserInfoChecker;
 import io.jenkins.plugins.tuleap_oauth.guice.TuleapOAuth2GuiceModule;
 import io.jenkins.plugins.tuleap_oauth.helper.PluginHelper;
 import io.jenkins.plugins.tuleap_oauth.model.AccessTokenRepresentation;
+import io.jenkins.plugins.tuleap_oauth.model.UserInfoRepresentation;
 import io.jenkins.plugins.tuleap_oauth.pkce.PKCECodeBuilder;
 import jenkins.model.Jenkins;
 import jenkins.security.SecurityListener;
 import okhttp3.*;
 import org.acegisecurity.*;
 import org.acegisecurity.context.SecurityContextHolder;
-import org.acegisecurity.providers.UsernamePasswordAuthenticationToken;
-import org.acegisecurity.userdetails.UserDetails;
 import org.acegisecurity.userdetails.UsernameNotFoundException;
 
 import org.apache.commons.lang.StringUtils;
@@ -65,8 +65,9 @@ public class TuleapSecurityRealm extends SecurityRealm {
 
     private static final String AUTHORIZATION_ENDPOINT = "oauth2/authorize?";
     private static final String ACCESS_TOKEN_ENDPOINT = "oauth2/token";
+    private static final String USER_INFO_ENDPOINT = "oauth2/userinfo";
 
-    private static final String SCOPES = "read:project read:user_membership openid";
+    private static final String SCOPES = "read:project read:user_membership openid profile";
     public static final String CODE_CHALLENGE_METHOD = "S256";
 
     private AuthorizationCodeChecker authorizationCodeChecker;
@@ -76,12 +77,18 @@ public class TuleapSecurityRealm extends SecurityRealm {
     private PKCECodeBuilder codeBuilder;
     private Gson gson;
     private JWTChecker jwtChecker;
+    private UserInfoChecker userInfoChecker;
 
     @DataBoundConstructor
     public TuleapSecurityRealm(String tuleapUri, String clientId, String clientSecret) {
         this.setTuleapUri(Util.fixEmptyAndTrim(tuleapUri));
         this.clientId = Util.fixEmptyAndTrim(clientId);
         this.setClientSecret(Util.fixEmptyAndTrim(clientSecret));
+    }
+
+    @Inject
+    public void setUserInfoChecker(UserInfoChecker userInfoChecker) {
+        this.userInfoChecker = userInfoChecker;
     }
 
     @Inject
@@ -148,7 +155,7 @@ public class TuleapSecurityRealm extends SecurityRealm {
 
             public Authentication authenticate(Authentication authentication)
                 throws AuthenticationException {
-                if (authentication instanceof UsernamePasswordAuthenticationToken) {
+                if (authentication instanceof TuleapAuthenticationToken) {
                     return authentication;
                 }
                 throw new BadCredentialsException(
@@ -226,19 +233,11 @@ public class TuleapSecurityRealm extends SecurityRealm {
 
         AccessTokenRepresentation accessTokenRepresentation;
         try (Response accessTokenResponse = okHttpClient.newCall(accessTokenRequest).execute()) {
-            ResponseBody body = accessTokenResponse.body();
-
+            ResponseBody body = this.getResponseBody(accessTokenResponse);
             if (body == null) {
-                LOGGER.log(Level.WARNING, "An error occurred");
                 return HttpResponses.redirectTo(this.getJenkinsInstance().getRootUrl() + TuleapAuthenticationErrorAction.REDIRECT_ON_AUTHENTICATION_ERROR);
             }
-
-            if (!accessTokenResponse.isSuccessful()) {
-                LOGGER.log(Level.WARNING, body.string());
-                return HttpResponses.redirectTo(this.getJenkinsInstance().getRootUrl() + TuleapAuthenticationErrorAction.REDIRECT_ON_AUTHENTICATION_ERROR);
-            }
-            String accessTokenBody = body.string();
-            accessTokenRepresentation = this.gson.fromJson(accessTokenBody, AccessTokenRepresentation.class);
+            accessTokenRepresentation = this.gson.fromJson(body.string(), AccessTokenRepresentation.class);
 
             if (!this.accessTokenChecker.checkResponseHeader(accessTokenResponse)) {
                 return HttpResponses.redirectTo(this.getJenkinsInstance().getRootUrl() + TuleapAuthenticationErrorAction.REDIRECT_ON_AUTHENTICATION_ERROR);
@@ -256,9 +255,50 @@ public class TuleapSecurityRealm extends SecurityRealm {
         this.jwtChecker.checkHeader(idToken);
         this.jwtChecker.checkPayloadAndSignature(idToken, jwks,this.tuleapUri,this.clientId,request);
 
-        this.authenticateAsAdmin(request);
+        Request req = new Request.Builder()
+            .url(this.tuleapUri + USER_INFO_ENDPOINT)
+            .addHeader("Authorization", "Bearer " + accessTokenRepresentation.getAccessToken())
+            .get()
+            .build();
+
+        UserInfoRepresentation userInfoRepresentation;
+        try (Response userInfoResponse = okHttpClient.newCall(req).execute()) {
+            ResponseBody body = this.getResponseBody(userInfoResponse);
+            if (body == null) {
+                return HttpResponses.redirectTo(this.getJenkinsInstance().getRootUrl() + TuleapAuthenticationErrorAction.REDIRECT_ON_AUTHENTICATION_ERROR);
+            }
+
+            if (!this.userInfoChecker.checkHandshake(userInfoResponse) ||
+                !this.userInfoChecker.checkUserInfoResponseHeader(userInfoResponse)
+            ) {
+                return HttpResponses.redirectTo(this.getJenkinsInstance().getRootUrl() + TuleapAuthenticationErrorAction.REDIRECT_ON_AUTHENTICATION_ERROR);
+            }
+
+            userInfoRepresentation = this.gson.fromJson(body.string(), UserInfoRepresentation.class);
+
+            if (!this.userInfoChecker.checkUserInfoResponseBody(userInfoRepresentation, idToken)) {
+                return HttpResponses.redirectTo(this.getJenkinsInstance().getRootUrl() + TuleapAuthenticationErrorAction.REDIRECT_ON_AUTHENTICATION_ERROR);
+            }
+        }
+
+        this.authenticateAsTuleapUser(request, userInfoRepresentation);
 
         return HttpResponses.redirectToContextRoot();
+    }
+
+    private ResponseBody getResponseBody(Response response) throws IOException {
+        ResponseBody body = response.body();
+
+        if (body == null) {
+            LOGGER.log(Level.WARNING, "An error occurred");
+            return null;
+        }
+
+        if (!response.isSuccessful()) {
+            LOGGER.log(Level.WARNING, body.string());
+            return null;
+        }
+        return body;
     }
 
     private Request getAccessTokenRequest(StaplerRequest request) {
@@ -284,18 +324,8 @@ public class TuleapSecurityRealm extends SecurityRealm {
         return this.pluginHelper.getJenkinsInstance();
     }
 
-    private void authenticateAsAdmin(StaplerRequest request) {
-        User admin = User.getById("admin", true);
-        if (admin == null) {
-            throw new UsernameNotFoundException("Admin user cannot be retrieved...");
-        }
-
-        UserDetails adminDetails = admin.getUserDetailsForImpersonation();
-        UsernamePasswordAuthenticationToken adminAuthToken = new UsernamePasswordAuthenticationToken(
-            adminDetails.getUsername(),
-            adminDetails.getPassword(),
-            adminDetails.getAuthorities()
-        );
+    private void authenticateAsTuleapUser(StaplerRequest request, UserInfoRepresentation userInfoRepresentation) {
+        TuleapAuthenticationToken tuleapAuth = new TuleapAuthenticationToken(userInfoRepresentation);
 
         HttpSession session = request.getSession(false);
         if (session != null) {
@@ -304,8 +334,16 @@ public class TuleapSecurityRealm extends SecurityRealm {
         }
         request.getSession(true);
 
-        SecurityContextHolder.getContext().setAuthentication(adminAuthToken);
-        SecurityListener.fireAuthenticated(adminDetails);
+        SecurityContextHolder.getContext().setAuthentication(tuleapAuth);
+        User tuleapUser = User.current();
+        if (tuleapUser == null) {
+            throw new UsernameNotFoundException("User not found");
+        }
+
+        tuleapUser.setFullName(userInfoRepresentation.getUsername());
+        SecurityListener.fireAuthenticated(new TuleapUserDetails(
+            userInfoRepresentation.getUsername(),
+            tuleapAuth.getAuthorities()));
     }
 
     @Extension
