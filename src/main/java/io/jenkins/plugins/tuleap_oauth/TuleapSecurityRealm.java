@@ -2,7 +2,6 @@ package io.jenkins.plugins.tuleap_oauth;
 
 import com.auth0.jwk.*;
 import com.auth0.jwt.JWT;
-import com.auth0.jwt.algorithms.Algorithm;
 import com.auth0.jwt.interfaces.DecodedJWT;
 import com.google.gson.Gson;
 import com.google.inject.Guice;
@@ -19,6 +18,7 @@ import io.jenkins.plugins.tuleap_oauth.checks.JWTChecker;
 import io.jenkins.plugins.tuleap_oauth.checks.UserInfoChecker;
 import io.jenkins.plugins.tuleap_oauth.guice.TuleapOAuth2GuiceModule;
 import io.jenkins.plugins.tuleap_oauth.helper.PluginHelper;
+import io.jenkins.plugins.tuleap_oauth.helper.TuleapAuthorizationCodeUrlBuilder;
 import io.jenkins.plugins.tuleap_oauth.helper.TuleapHttpRedirect;
 import io.jenkins.plugins.tuleap_oauth.model.AccessTokenRepresentation;
 import io.jenkins.plugins.tuleap_oauth.model.UserInfoRepresentation;
@@ -40,7 +40,6 @@ import java.io.UnsupportedEncodingException;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.security.NoSuchAlgorithmException;
-import java.security.interfaces.RSAPublicKey;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -64,11 +63,11 @@ public class TuleapSecurityRealm extends SecurityRealm {
     public static final String NONCE_ATTRIBUTE = "nonce";
 
 
-    private static final String AUTHORIZATION_ENDPOINT = "oauth2/authorize?";
+    public static final String AUTHORIZATION_ENDPOINT = "oauth2/authorize?";
     private static final String ACCESS_TOKEN_ENDPOINT = "oauth2/token";
     private static final String USER_INFO_ENDPOINT = "oauth2/userinfo";
 
-    private static final String SCOPES = "read:project read:user_membership openid profile";
+    public static final String SCOPES = "read:project read:user_membership openid profile";
     public static final String CODE_CHALLENGE_METHOD = "S256";
 
     private AuthorizationCodeChecker authorizationCodeChecker;
@@ -79,12 +78,18 @@ public class TuleapSecurityRealm extends SecurityRealm {
     private Gson gson;
     private JWTChecker jwtChecker;
     private UserInfoChecker userInfoChecker;
+    private TuleapAuthorizationCodeUrlBuilder authorizationCodeUrlBuilder;
 
     @DataBoundConstructor
     public TuleapSecurityRealm(String tuleapUri, String clientId, String clientSecret) {
         this.setTuleapUri(Util.fixEmptyAndTrim(tuleapUri));
         this.clientId = Util.fixEmptyAndTrim(clientId);
         this.setClientSecret(Util.fixEmptyAndTrim(clientSecret));
+    }
+
+    @Inject
+    public void setAuthorizationCodeUrlBuilder(TuleapAuthorizationCodeUrlBuilder authorizationCodeUrlBuilder) {
+        this.authorizationCodeUrlBuilder = authorizationCodeUrlBuilder;
     }
 
     @Inject

@@ -118,6 +118,29 @@ public class TuleapSecurityRealmTest {
         assertEquals("https://jenkins.example.com/tuleapLogout", tuleapSecurityRealm.getPostLogOutUrl(request, authentication));
     }
 
+//    @Test
+//    public void testItShouldRedirectToTheErrorAuthenticationErrorPageWhenBadAuthorizationCode() throws JwkException, ServletException, IOException {
+//        StaplerRequest request = mock(StaplerRequest.class);
+//        StaplerResponse response = mock(StaplerResponse.class);
+//
+//        when(this.authorizationCodeChecker.checkAuthorizationCode(request)).thenReturn(false);
+//
+//        when(this.jenkins.getRootUrl()).thenReturn("https://jenkins.example.com/");
+//
+//        String expectedUri = "https://jenkins.example.com/tuleapError";
+//        HttpResponse expectedRedirection;
+//        expectedRedirection = new HttpRedirect(expectedUri);
+//
+//        TuleapSecurityRealm tuleapSecurityRealm = new TuleapSecurityRealm("","","");
+//        this.injectMock(tuleapSecurityRealm);
+//
+//        System.out.println(expectedRedirection.hashCode());
+//        HttpResponse response1;
+//        response1 = new HttpRedirect(expectedUri);
+////        System.out.println(HttpRedirect);
+//        assertEquals(expectedRedirection.toString(), tuleapSecurityRealm.doFinishLogin(request,response).toString());
+//    }
+
     @Test
     public void testItShouldReturnTheAuthorizationCodeUriWithTheRightParameters() throws NoSuchAlgorithmException, UnsupportedEncodingException {
         StaplerRequest request = mock(StaplerRequest.class);
@@ -125,7 +148,7 @@ public class TuleapSecurityRealmTest {
         String stateAndNonce = "Brabus";
         when(this.pluginHelper.buildRandomBase64EncodedURLSafeString()).thenReturn(stateAndNonce);
 
-        HttpSession session = mock(HttpSession.class);
+        HttpSession session = spy(HttpSession.class);
         when(request.getSession()).thenReturn(session);
 
         String rootUrl = "https://jenkins.example.com/";
@@ -155,29 +178,10 @@ public class TuleapSecurityRealmTest {
         this.injectMock(tuleapSecurityRealm);
         TuleapHttpRedirect redirect = (TuleapHttpRedirect) tuleapSecurityRealm.doCommenceLogin(request);
 
+        verify(session, times(1)).setAttribute(TuleapSecurityRealm.CODE_VERIFIER_SESSION_ATTRIBUTE, codeVerifier);
+        verify(session, times(1)).setAttribute(TuleapSecurityRealm.NONCE_ATTRIBUTE, stateAndNonce);
+        verify(session, times(1)).setAttribute(TuleapSecurityRealm.STATE_SESSION_ATTRIBUTE, stateAndNonce);
+
         assertEquals(expectedRedirection.getUrl(), redirect.getUrl());
     }
-
-//    @Test
-//    public void testItShouldRedirectToTheErrorAuthenticationErrorPageWhenBadAuthorizationCode() throws JwkException, ServletException, IOException {
-//        StaplerRequest request = mock(StaplerRequest.class);
-//        StaplerResponse response = mock(StaplerResponse.class);
-//
-//        when(this.authorizationCodeChecker.checkAuthorizationCode(request)).thenReturn(false);
-//
-//        when(this.jenkins.getRootUrl()).thenReturn("https://jenkins.example.com/");
-//
-//        String expectedUri = "https://jenkins.example.com/tuleapError";
-//        HttpResponse expectedRedirection;
-//        expectedRedirection = new HttpRedirect(expectedUri);
-//
-//        TuleapSecurityRealm tuleapSecurityRealm = new TuleapSecurityRealm("","","");
-//        this.injectMock(tuleapSecurityRealm);
-//
-//        System.out.println(expectedRedirection.hashCode());
-//        HttpResponse response1;
-//        response1 = new HttpRedirect(expectedUri);
-////        System.out.println(HttpRedirect);
-//        assertEquals(expectedRedirection.toString(), tuleapSecurityRealm.doFinishLogin(request,response).toString());
-//    }
 }
