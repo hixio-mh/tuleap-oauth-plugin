@@ -11,7 +11,7 @@ public class UserInfoCheckerImpl implements UserInfoChecker {
 
     private static final Logger LOGGER = Logger.getLogger(UserInfoChecker.class.getName());
 
-    private static final String CONTENT_TYPE_HEADER_VALUE = "application/json";
+    private static final String CONTENT_TYPE_HEADER_VALUE = "application/json;charset=utf-8";
 
     @Override
     public boolean checkHandshake(Response response) {
