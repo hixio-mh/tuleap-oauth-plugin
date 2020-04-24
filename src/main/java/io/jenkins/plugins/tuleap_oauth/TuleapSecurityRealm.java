@@ -19,6 +19,7 @@ import io.jenkins.plugins.tuleap_oauth.checks.JWTChecker;
 import io.jenkins.plugins.tuleap_oauth.checks.UserInfoChecker;
 import io.jenkins.plugins.tuleap_oauth.guice.TuleapOAuth2GuiceModule;
 import io.jenkins.plugins.tuleap_oauth.helper.PluginHelper;
+import io.jenkins.plugins.tuleap_oauth.helper.TuleapHttpRedirect;
 import io.jenkins.plugins.tuleap_oauth.model.AccessTokenRepresentation;
 import io.jenkins.plugins.tuleap_oauth.model.UserInfoRepresentation;
 import io.jenkins.plugins.tuleap_oauth.pkce.PKCECodeBuilder;
@@ -200,7 +201,7 @@ public class TuleapSecurityRealm extends SecurityRealm {
 
         request.getSession().setAttribute(NONCE_ATTRIBUTE, nonce);
 
-        return new HttpRedirect(this.tuleapUri + AUTHORIZATION_ENDPOINT +
+        return new TuleapHttpRedirect(this.tuleapUri + AUTHORIZATION_ENDPOINT +
             "response_type=code" +
             "&client_id=" + this.clientId +
             "&redirect_uri=" + redirectUri +
