@@ -51,7 +51,7 @@ public class UserInfoCheckerImplTest {
     @Test
     public void testItReturnsTrueWhenGoodContentType() {
         Response response = mock(Response.class);
-        when(response.header("Content-type")).thenReturn("application/json");
+        when(response.header("Content-type")).thenReturn("application/json;charset=utf-8");
 
         UserInfoCheckerImpl userInfoChecker = new UserInfoCheckerImpl();
         assertTrue(userInfoChecker.checkUserInfoResponseHeader(response));
