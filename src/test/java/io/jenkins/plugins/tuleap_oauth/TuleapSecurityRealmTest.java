@@ -1,14 +1,13 @@
 package io.jenkins.plugins.tuleap_oauth;
 
-import com.google.gson.Gson;
 import io.jenkins.plugins.tuleap_oauth.checks.AccessTokenChecker;
 import io.jenkins.plugins.tuleap_oauth.checks.AuthorizationCodeChecker;
 import io.jenkins.plugins.tuleap_oauth.checks.IDTokenChecker;
 import io.jenkins.plugins.tuleap_oauth.helper.PluginHelper;
 import io.jenkins.plugins.tuleap_oauth.helper.PluginHelperImpl;
 import io.jenkins.plugins.tuleap_oauth.helper.TuleapAuthorizationCodeUrlBuilder;
+import io.jenkins.plugins.tuleap_server_configuration.TuleapConfiguration;
 import jenkins.model.Jenkins;
-import okhttp3.OkHttpClient;
 import org.acegisecurity.Authentication;
 import org.junit.Before;
 import org.junit.Test;
@@ -22,9 +21,7 @@ public class TuleapSecurityRealmTest {
     private PluginHelper pluginHelper;
     private AuthorizationCodeChecker authorizationCodeChecker;
     private AccessTokenChecker accessTokenChecker;
-    private Gson gson;
     private IDTokenChecker IDTokenChecker;
-    private OkHttpClient httpClient;
     private TuleapAuthorizationCodeUrlBuilder authorizationCodeUrlBuilder;
 
     private Jenkins jenkins;
@@ -34,9 +31,7 @@ public class TuleapSecurityRealmTest {
         this.pluginHelper = mock(PluginHelperImpl.class);
         this.authorizationCodeChecker = mock(AuthorizationCodeChecker.class);
         this.accessTokenChecker = mock(AccessTokenChecker.class);
-        this.gson = mock(Gson.class);
         this.IDTokenChecker = mock(IDTokenChecker.class);
-        this.httpClient = mock(OkHttpClient.class);
         this.authorizationCodeUrlBuilder = mock(TuleapAuthorizationCodeUrlBuilder.class);
 
         this.jenkins = mock(Jenkins.class);
@@ -47,21 +42,31 @@ public class TuleapSecurityRealmTest {
         securityRealm.setPluginHelper(this.pluginHelper);
         securityRealm.setAuthorizationCodeChecker(this.authorizationCodeChecker);
         securityRealm.setAccessTokenChecker(this.accessTokenChecker);
-        securityRealm.setGson(this.gson);
         securityRealm.setIDTokenChecker(this.IDTokenChecker);
-        securityRealm.setHttpClient(this.httpClient);
         securityRealm.setAuthorizationCodeUrlBuilder(this.authorizationCodeUrlBuilder);
     }
 
     @Test
     public void testAddDashAtTheEndOfTheTuleapUriWhenItIsMissing() {
-        TuleapSecurityRealm tuleapSecurityRealm = new TuleapSecurityRealm("https://jenkins.example.com", "", "");
+        TuleapSecurityRealm tuleapSecurityRealm = new TuleapSecurityRealm("", "");
+        this.injectMock(tuleapSecurityRealm);
+
+        TuleapConfiguration configuration = mock(TuleapConfiguration.class);
+        when(this.pluginHelper.getConfiguration()).thenReturn(configuration);
+        when(configuration.getDomainUrl()).thenReturn("https://jenkins.example.com");
+
         assertEquals("https://jenkins.example.com/", tuleapSecurityRealm.getTuleapUri());
     }
 
     @Test
     public void testItDoesNotAddADashAtTheOfTheUriIfTheUriAlreadyEndWithIt() {
-        TuleapSecurityRealm tuleapSecurityRealm = new TuleapSecurityRealm("https://jenkins.example.com/", "", "");
+        TuleapSecurityRealm tuleapSecurityRealm = new TuleapSecurityRealm("", "");
+        this.injectMock(tuleapSecurityRealm);
+
+        TuleapConfiguration configuration = mock(TuleapConfiguration.class);
+        when(this.pluginHelper.getConfiguration()).thenReturn(configuration);
+        when(configuration.getDomainUrl()).thenReturn("https://jenkins.example.com");
+
         assertEquals("https://jenkins.example.com/", tuleapSecurityRealm.getTuleapUri());
     }
 
@@ -74,7 +79,7 @@ public class TuleapSecurityRealmTest {
 
         when(this.jenkins.hasPermission(Jenkins.READ)).thenReturn(true);
 
-        TuleapSecurityRealm tuleapSecurityRealm = new TuleapSecurityRealm("", "", "");
+        TuleapSecurityRealm tuleapSecurityRealm = new TuleapSecurityRealm( "", "");
         this.injectMock(tuleapSecurityRealm);
 
         assertEquals("https://jenkins.example.com/", tuleapSecurityRealm.getPostLogOutUrl(request, authentication));
@@ -89,14 +94,9 @@ public class TuleapSecurityRealmTest {
 
         when(this.jenkins.hasPermission(Jenkins.READ)).thenReturn(false);
 
-        TuleapSecurityRealm tuleapSecurityRealm = new TuleapSecurityRealm("", "", "");
+        TuleapSecurityRealm tuleapSecurityRealm = new TuleapSecurityRealm( "", "");
         this.injectMock(tuleapSecurityRealm);
 
         assertEquals("https://jenkins.example.com/tuleapLogout", tuleapSecurityRealm.getPostLogOutUrl(request, authentication));
-    }
-
-    @Test
-    public void testItShouldReturnTheTuleapAuthenticationTokenWhenTheUserConnectsWithThePlugin(){
-
     }
 }
