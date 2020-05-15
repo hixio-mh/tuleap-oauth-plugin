@@ -10,18 +10,6 @@ import static org.mockito.Mockito.*;
 public class UserInfoCheckerImplTest {
 
     @Test
-    public void testItReturnFalseWhenTheSubjectParameterIsMissing() {
-        UserInfo userInfo = mock(UserInfo.class);
-        when(userInfo.getSubject()).thenReturn(null);
-
-        DecodedJWT idToken = mock(DecodedJWT.class);
-        verify(idToken, never()).getSignature();
-
-        UserInfoCheckerImpl userInfoChecker = new UserInfoCheckerImpl();
-        assertFalse(userInfoChecker.checkUserInfoResponseBody(userInfo, idToken));
-    }
-
-    @Test
     public void testItReturnFalseWhenTheSubjectValueIsNotExpected() {
         UserInfo userInfo = mock(UserInfo.class);
         when(userInfo.getSubject()).thenReturn("123");

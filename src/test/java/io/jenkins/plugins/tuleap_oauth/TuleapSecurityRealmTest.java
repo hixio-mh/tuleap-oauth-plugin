@@ -1,5 +1,7 @@
 package io.jenkins.plugins.tuleap_oauth;
 
+import io.jenkins.plugins.tuleap_api.client.authentication.AccessTokenApi;
+import io.jenkins.plugins.tuleap_api.client.authentication.OpenIDClientApi;
 import io.jenkins.plugins.tuleap_oauth.checks.AccessTokenChecker;
 import io.jenkins.plugins.tuleap_oauth.checks.AuthorizationCodeChecker;
 import io.jenkins.plugins.tuleap_oauth.checks.IDTokenChecker;
@@ -23,6 +25,8 @@ public class TuleapSecurityRealmTest {
     private AccessTokenChecker accessTokenChecker;
     private IDTokenChecker IDTokenChecker;
     private TuleapAuthorizationCodeUrlBuilder authorizationCodeUrlBuilder;
+    private AccessTokenApi accessTokenApi;
+    private OpenIDClientApi openIDClientApi;
 
     private Jenkins jenkins;
 
@@ -33,6 +37,8 @@ public class TuleapSecurityRealmTest {
         this.accessTokenChecker = mock(AccessTokenChecker.class);
         this.IDTokenChecker = mock(IDTokenChecker.class);
         this.authorizationCodeUrlBuilder = mock(TuleapAuthorizationCodeUrlBuilder.class);
+        this.accessTokenApi = mock(AccessTokenApi.class);
+        this.openIDClientApi = mock(OpenIDClientApi.class);
 
         this.jenkins = mock(Jenkins.class);
         when(pluginHelper.getJenkinsInstance()).thenReturn(jenkins);
@@ -44,6 +50,8 @@ public class TuleapSecurityRealmTest {
         securityRealm.setAccessTokenChecker(this.accessTokenChecker);
         securityRealm.setIDTokenChecker(this.IDTokenChecker);
         securityRealm.setAuthorizationCodeUrlBuilder(this.authorizationCodeUrlBuilder);
+        securityRealm.setAccessTokenApi(this.accessTokenApi);
+        securityRealm.setOpenIDClientApi(this.openIDClientApi);
     }
 
     @Test

@@ -8,68 +8,20 @@ import static org.mockito.Mockito.*;
 
 public class AccessTokenCheckerImplTest {
 
-    @Test
-    public void testResponseBodyReturnsFalseWhenThereIsNoBody() {
-        AccessTokenCheckerImpl accessTokenChecker = new AccessTokenCheckerImpl();
-        assertFalse(accessTokenChecker.checkResponseBody(null));
-    }
-
-    @Test
-    public void testResponseBodyReturnsFalseWhenTheAccessTokenIsMissing() {
-        AccessToken representation = mock(AccessToken.class);
-        when(representation.getAccessToken()).thenReturn(null);
-
-        AccessTokenCheckerImpl accessTokenChecker = new AccessTokenCheckerImpl();
-        assertFalse(accessTokenChecker.checkResponseBody(representation));
-    }
-
-    @Test
-    public void testResponseBodyReturnsFalseWhenTheTokenTypeIsMissing() {
-        AccessToken representation = mock(AccessToken.class);
-        when(representation.getAccessToken()).thenReturn("vroom vroom");
-        when(representation.getTokenType()).thenReturn(null);
-
-        AccessTokenCheckerImpl accessTokenChecker = new AccessTokenCheckerImpl();
-        assertFalse(accessTokenChecker.checkResponseBody(representation));
-    }
 
     @Test
     public void testResponseBodyReturnsFalseWhenBadTokenType() {
         AccessToken representation = mock(AccessToken.class);
-        when(representation.getAccessToken()).thenReturn("vroom vroom");
         when(representation.getTokenType()).thenReturn("mac");
 
         AccessTokenCheckerImpl accessTokenChecker = new AccessTokenCheckerImpl();
         assertFalse(accessTokenChecker.checkResponseBody(representation));
     }
 
-    @Test
-    public void testResponseBodyReturnsFalseWhenTheExpirationDateIsMissing() {
-        AccessToken representation = mock(AccessToken.class);
-        when(representation.getAccessToken()).thenReturn("vroom vroom");
-        when(representation.getTokenType()).thenReturn("bearer");
-        when(representation.getExpiresIn()).thenReturn(null);
-
-        AccessTokenCheckerImpl accessTokenChecker = new AccessTokenCheckerImpl();
-        assertFalse(accessTokenChecker.checkResponseBody(representation));
-    }
-
-    @Test
-    public void testResponseBodyReturnsFalseWhenTheIdTokenIsMissing() {
-        AccessToken representation = mock(AccessToken.class);
-        when(representation.getAccessToken()).thenReturn("vroom vroom");
-        when(representation.getTokenType()).thenReturn("bearer");
-        when(representation.getExpiresIn()).thenReturn("1202424");
-        when(representation.getIdToken()).thenReturn(null);
-
-        AccessTokenCheckerImpl accessTokenChecker = new AccessTokenCheckerImpl();
-        assertFalse(accessTokenChecker.checkResponseBody(representation));
-    }
 
     @Test
     public void testResponseBodyReturnsTrueWhenAllChecksAreOk() {
         AccessToken representation = mock(AccessToken.class);
-        when(representation.getAccessToken()).thenReturn("vroom vroom");
         when(representation.getTokenType()).thenReturn("bearer");
         when(representation.getExpiresIn()).thenReturn("1202424");
         when(representation.getIdToken()).thenReturn("ignseojseogjiosevjazfoaz");
