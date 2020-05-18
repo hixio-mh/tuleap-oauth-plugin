@@ -12,12 +12,14 @@ import hudson.Util;
 import hudson.model.Descriptor;
 import hudson.model.User;
 import hudson.security.SecurityRealm;
+import hudson.security.UserMayOrMayNotExistException;
 import hudson.util.FormValidation;
 import hudson.util.Secret;
 import io.jenkins.plugins.tuleap_oauth.checks.AccessTokenChecker;
 import io.jenkins.plugins.tuleap_oauth.checks.AuthorizationCodeChecker;
 import io.jenkins.plugins.tuleap_oauth.checks.IDTokenChecker;
 import io.jenkins.plugins.tuleap_oauth.checks.UserInfoChecker;
+import io.jenkins.plugins.tuleap_oauth.exceptions.UserInfoRetrievalException;
 import io.jenkins.plugins.tuleap_oauth.guice.TuleapOAuth2GuiceModule;
 import io.jenkins.plugins.tuleap_oauth.helper.PluginHelper;
 import io.jenkins.plugins.tuleap_oauth.helper.TuleapAuthorizationCodeUrlBuilder;
@@ -28,6 +30,7 @@ import jenkins.security.SecurityListener;
 import okhttp3.*;
 import org.acegisecurity.*;
 import org.acegisecurity.context.SecurityContextHolder;
+import org.acegisecurity.userdetails.UserDetails;
 import org.acegisecurity.userdetails.UsernameNotFoundException;
 
 import org.apache.commons.lang.StringUtils;
@@ -155,6 +158,58 @@ public class TuleapSecurityRealm extends SecurityRealm {
     }
 
     @Override
+    public UserDetails loadUserByUsername(String username) {
+        Authentication token = SecurityContextHolder.getContext().getAuthentication();
+
+        if (token == null) {
+            throw new UsernameNotFoundException("No access token found for user " + username);
+        }
+
+        if (!(token instanceof TuleapAuthenticationToken)) {
+            throw new UserMayOrMayNotExistException("Unknown token type for user " + username);
+        }
+
+        AccessTokenRepresentation accessToken = this.gson.fromJson(
+            this.tuleapAccessTokenStorage.retrieve(Objects.requireNonNull(User.getById(username, false))).getPlainText(),
+            AccessTokenRepresentation.class
+        );
+
+        Request userInfoRequest = new Request.Builder()
+            .url(this.tuleapUri + USER_INFO_ENDPOINT)
+            .addHeader("Authorization", "Bearer " + accessToken.getAccessToken())
+            .get()
+            .build();
+
+        UserInfoRepresentation userInfoRepresentation;
+        try (Response userInfoResponse = this.httpClient.newCall(userInfoRequest).execute()) {
+            ResponseBody body = this.getResponseBody(userInfoResponse);
+            if (body == null) {
+                throw new UserInfoRetrievalException();
+            }
+
+            if (!this.userInfoChecker.checkHandshake(userInfoResponse) ||
+                !this.userInfoChecker.checkUserInfoResponseHeader(userInfoResponse)
+            ) {
+                throw new UserInfoRetrievalException();
+            }
+
+            userInfoRepresentation = this.gson.fromJson(body.string(), UserInfoRepresentation.class);
+
+            if (!this.userInfoChecker.checkUserInfoResponseBody(userInfoRepresentation, JWT.decode(accessToken.getIdToken()))) {
+                throw new UserInfoRetrievalException();
+            }
+
+        } catch (IOException | UserInfoRetrievalException exception) {
+            throw new UsernameNotFoundException("Unable to retrieve info for user " + username);
+        }
+
+        return new TuleapUserDetails(
+            userInfoRepresentation.getUsername(),
+            token.getAuthorities()
+        );
+    }
+
+    @Override
     public SecurityComponents createSecurityComponents() {
         return new SecurityComponents(new AuthenticationManager() {
 
@@ -264,12 +319,12 @@ public class TuleapSecurityRealm extends SecurityRealm {
             }
         }
 
+        this.authenticateAsTuleapUser(request, userInfoRepresentation);
+
         this.tuleapAccessTokenStorage.save(
             Objects.requireNonNull(User.current()),
             Secret.fromString(this.gson.toJson(accessTokenRepresentation))
         );
-
-        this.authenticateAsTuleapUser(request, userInfoRepresentation);
 
         return HttpResponses.redirectToContextRoot();
     }
